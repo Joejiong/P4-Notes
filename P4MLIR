@@ -1,0 +1,166 @@
+中文阅读记录
+
+文件：P4HIR_Attrs.td (P4HIR 属性定义)
+
+作用：
+
+这个文件定义了 P4HIR 方言中可以使用的各种属性。属性是附加在 MLIR IR（中间表示）的各种部分（操作、类型等）上的元数据，用于提供额外的信息，超出 IR 的基本结构。
+
+主要概念和组成部分：
+
+P4HIR_Attr (基础类)：
+
+class P4HIR_Attr<string name, string attrMnemonic, list<Trait> traits = []>：这是所有 P4HIR 属性的基础类，类似于定义新属性的模板。
+name：属性的完整名称（例如："Int", "EnumField"）。
+attrMnemonic：属性的简短助记名（例如："int", "enum_field"）。这通常用于汇编表示中。
+traits：属性实现的特性列表。特性为属性添加额外的能力或行为。
+mnemonic: 为属性指定助记名。
+hasCustomAssemblyFormat: 表示属性具有自定义的汇编格式，因此需要在 C++ 中手动实现 parse 和 print 方法。
+P4HIR_BoolAttr (布尔属性)：
+
+def P4HIR_BoolAttr : P4HIR_Attr<"Bool", "bool", [TypedAttrInterface]>：定义一个表示 true 或 false 值的属性。
+TypedAttrInterface：这个特性表示该属性与特定的类型相关联，这里是 BoolType。
+parameters: 指定构建这个属性所需的参数。这里需要一个 BoolType 和一个布尔值（$value）。
+builders：定义如何在 C++ 中创建 P4HIR_BoolAttr。 你可以看到你可以直接通过一个bool来构建。
+assemblyFormat：描述该属性在汇编表示中如何显示。这里，它将以 <true> 或 <false> 的形式打印。
+P4HIR_IntAttr (整数属性)：
+
+def P4HIR_IntAttr : P4HIR_Attr<"Int", "int", [TypedAttrInterface]>：一个表示整数值的属性。
+TypedAttrInterface：同样，与一个类型（例如 bit<32> 等整数类型）相关联。
+parameters：接受一个 Type 和一个 llvm::APInt（任意精度整数）。
+builders：定义如何从一个 Type 和一个 APInt，或者从一个 Type 和一个 int64_t 创建 P4HIR_IntAttr。
+extraClassDeclaration：为生成的 C++ 类添加额外的方法：
+getSInt()：以有符号整数形式获取值。
+getUInt()：以无符号整数形式获取值。
+isNullValue()：检查值是否为零。
+genVerifyDecl: 生成 verify 方法。
+hasCustomAssemblyFormat: 这个属性拥有自定义的汇编格式。
+P4HIR_AggAttr (集合属性):
+
+def P4HIR_AggAttr : P4HIR_Attr<"Agg", "aggregate", [TypedAttrInterface]>: 表示一个集合类型 (如结构体)。
+parameters: 接受一个 Type 和一个 mlir::ArrayAttr.
+assemblyFormat: 属性将被打印为 <fields>
+builders: 构建集合属性。
+P4HIR_EnumFieldAttr (枚举字段属性)：
+
+def P4HIR_EnumFieldAttr : P4HIR_Attr<"EnumField", "enum_field", [TypedAttrInterface]>：表示枚举类型中的一个特定字段值。
+parameters：接受一个 Type 和一个 mlir::StringAttr（字段名称）。
+skipDefaultBuilders = 1：这意味着不会生成默认的构建器，只会使用自定义构建器。
+hasCustomAssemblyFormat: 这表示需要在 C++ 中手动定义 parse 和 print 方法。
+builders：定义如何从一个 Type 和一个 StringAttr 或 StringRef 创建该属性。
+P4HIR_ErrorCodeAttr (错误码属性)：
+
+def P4HIR_ErrorCodeAttr : P4HIR_Attr<"ErrorCode", "error", [TypedAttrInterface]>：表示一个错误码。
+与 P4HIR_EnumFieldAttr 非常相似。
+ValidityBit 和 ValidityBitAttr (头部有效性)：
+
+ValidityBit_Invalid, ValidityBit_Valid：这些是用来表示枚举的 I32BitEnumAttrCase。
+ValidityBit：I32BitEnumAttr 是一个接受枚举选项的枚举。
+ValidityBitAttr：EnumAttr 是一个使用 ValidityBit 的特殊属性。
+extraClassDeclaration: 添加额外的方法到生成的 C++ 类，比如 getType。
+ParamDirection 和 ParamDirAttr (参数方向):
+
+ParamDirection_None, ParamDirection_In, ParamDirection_Out, ParamDirection_InOut: 这些是用来表示枚举的 I32EnumAttrCase。
+ParamDirection: I32EnumAttr 是一个接受枚举选项的枚举。
+ParamDirAttr: EnumAttr 是一个使用 ParamDirection 的特殊属性。
+P4HIR_CtorParamAttr: 表示一个构造函数的参数。
+
+P4HIR_MatchKindAttr: 表示匹配类型，比如 "exact", "lpm"。
+
+文件：P4HIR_ControlOps.td (P4HIR 控制操作定义)
+
+作用：
+
+这个文件定义了与控制流相关的操作，主要是表格（tables）和控制器（controls），这是 P4 中的关键概念。
+
+主要概念和组成部分：
+
+ControlOp (控制器操作)：
+
+def ControlOp : P4HIR_Op<"control", [...]>：定义 control 操作，表示 P4 中的一个控制器块。
+Symbol, SymbolTable, IsolatedFromAbove：这些是特性。
+Symbol：表示这个操作有一个名称。
+SymbolTable：表示这个操作可以包含其他命名的东西（如函数、变量）。
+IsolatedFromAbove: 表示这个操作没有外部影响。
+FunctionOpInterface: 这是一个接口，使得 ControlOp 像一个函数。
+AutomaticAllocationScope: 表示应该为这个操作创建作用域。
+arguments：指定控制器块的输入：
+SymbolNameAttr：控制器块的名称。
+TypeAttrOf<FuncType>：函数签名（输入和输出类型）。
+TypeAttrOf<CtorType>: 构造函数签名。
+regions：定义一个名为 body 的区域（一组嵌套的操作）。
+hasCustomAssemblyFormat = 1：需要在 C++ 中自定义解析/打印方法。
+skipDefaultBuilders: 跳过默认构建器。
+builders：定义一个自定义的构建器，它接受名称、FuncType 和 CtorType 作为输入。
+extraClassDeclaration: 添加额外的方法到生成的 C++ 类:
+getCallableRegion(): 返回区域。
+getFunctionType(): 返回 apply 类型。
+getArgumentTypes(): 返回输入类型。
+setFunctionTypeAttr: 设置 function type 属性。
+getResultTypes(): 返回输出类型。
+createEntryBlock(): 创建一个新的 entry block。
+ControlApplyOp (控制器应用操作):
+
+def ControlApplyOp : P4HIR_Op<"control_apply", [...]>：表示一个控制器块的应用。
+AutomaticAllocationScope: 表示应该为这个操作创建作用域。
+NoRegionArguments: 这个操作没有区域参数。
+Terminator, NoTerminator: 这个操作是一个终结者，而且没有终结者。
+ParentOneOf<["ControlOp"]>: 这个操作的父操作应该是 ControlOp。
+assemblyFormat: 指定如何打印这个操作。
+TableOp (表格操作)：
+
+def TableOp : P4HIR_Op<"table", [...]>：表示 P4 中的一个表格。
+Symbol：有一个名称。
+NoTerminator: 没有终结者。
+ParentOneOf<["ControlOp"]>: 这个操作的父操作应该是 ControlOp。
+arguments：SymbolNameAttr（表格名称）。
+assemblyFormat: 指定如何打印这个操作。
+TableApplyOp (表格应用操作)：
+
+def TableApplyOp : P4HIR_Op<"table_apply", [...]>：表示表格的应用。
+NoRegionArguments: 这个操作没有区域参数。
+CallOpInterface: 这是一个接口，使得 TableApplyOp 像一个 call 操作。
+DeclareOpInterfaceMethods<SymbolUserOpInterface>: 使得这个操作能够使用符号。
+DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>: 使得这个操作能够使用操作汇编接口。
+results：StructType（表格应用的结果）。
+arguments：SymbolRefAttr（要应用的表格名称）。
+hasVerifier = 0：没有实现验证。
+extraClassDeclaration: 添加额外的方法，比如 getCallableForCallee, setCalleeFromCallable, getArgOperands 和 getArgOperandsMutable。
+assemblyFormat: 如何打印这个操作。
+TableEntryOp, TableActionsOp, TableActionOp, TableDefaultActionOp: 这些操作定义了表格的条目，动作列表，动作和默认动作。
+
+TableSizeOp, TableKeyOp: 这些操作定义了表格的大小和表格的键。
+
+TableKeyEntryOp: 定义了表格键的条目。
+
+这两个文件如何协同工作：
+
+属性提供信息： P4HIR_Attrs.td 中定义的属性用于描述 P4HIR_ControlOps.td 中控制相关操作的属性或值。例如，一个表格可能有一个属性指定其大小，或者一个动作可能有一个属性指定其参数的方向。
+操作构建控制流： P4HIR_ControlOps.td 中的操作表示 P4 程序中控制流的基本构建块：
+ControlOp：定义控制器块。
+TableOp：定义表格。
+TableApplyOp：应用表格。
+TableEntryOp, TableActionsOp, TableActionOp, TableDefaultActionOp: 定义表格的动作。
+TableSizeOp, TableKeyOp, TableKeyEntryOp: 定义表格的键。
+代码生成： mlir-tblgen 工具处理这些 .td 文件以生成 C++ 代码。这包括：
+属性和操作的 C++ 类。
+构建、解析和打印属性和操作的方法。
+验证逻辑。
+关键概念：
+
+TableGen： 用于定义领域特定信息并从中生成代码的系统。
+属性（Attributes）： 附加到 IR 对象的元数据。
+操作（Operations）： IR 中的动作或计算。
+Traits: 为操作和属性添加额外的能力。
+Builders: 用于帮助创建类型，属性和操作。
+Assembly format: 定义类型，属性和操作的打印和解析方式。
+Custom assembly format: 当使用这个选项时，parse 和 print 方法需要手动实现。
+Symbol: 表示操作拥有一个名字。
+Symbol table: 表示这个操作能够包含其他的具名对象。
+Region: 区域是一个嵌套的代码块。
+总结：
+
+P4HIR_Attrs.td 定义了 P4HIR 方言的属性，用于描述值、元数据和属性。
+P4HIR_ControlOps.td 定义了控制器块和表格的操作，表示 P4 中的控制流。
+TableGen 用于从这些 .td 文件生成 C++ 代码。
+这两个文件协同工作。P4HIR_ControlOps.td 中的操作使用了 P4HIR_Attrs.td 中定义的属性。
